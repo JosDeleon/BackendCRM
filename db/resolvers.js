@@ -81,7 +81,7 @@ const resolvers = {
     },
     obtenerPedidosVendedor: async (_, {}, ctx) => {
       try {
-        const pedidos = await Pedido.find({ vendedor: ctx.usuario.id });
+        const pedidos = await Pedido.find({ vendedor: ctx.usuario.id }).populate('cliente');
         return pedidos;
       } catch (error) {
         console.log(error)
@@ -298,9 +298,8 @@ const resolvers = {
 
       console.log(ctx);
       const { cliente } = input;
-
       //Revisar si el cliente  existe
-      const existeCliente = await Cliente.findById({ cliente });
+      const existeCliente = await Cliente.findById(cliente);
       console.log(existeCliente);
       if (!existeCliente) {
         throw new Error("El cliente NO existe");
@@ -352,33 +351,35 @@ const resolvers = {
       if(!existeCliente){
         throw new Error('Cliente no encontrado');
       }
-      
       //Verificar si su vendedor edita
       if(existeCliente.vendedor.toString() !== ctx.usuario.id ){
         throw new Error('No tiene credenciales');
       }
-
-      //Revisar Stock
-      for await (const articulo of input.pedido){
-        const { id } = articulo;
-        const producto = await Producto.findById(id);
-
-        if(articulo.cantidad > producto.existencia){
-          throw new Error(`El articulo: ${producto.nombre} excede la cantidad disponoible`)
-        } else {
-          producto.existencia = producto.existencia - articulo.cantidad;
-          try {
-            await producto.save();
-          } catch (error) {
-            console.log(error);
+      
+      if ( input.pedido ) {
+        //Revisar Stock
+        for await (const articulo of input.pedido){
+          const { id } = articulo;
+          const producto = await Producto.findById(id);
+  
+          if(articulo.cantidad > producto.existencia){
+            throw new Error(`El articulo: ${producto.nombre} excede la cantidad disponoible`)
+          } else {
+            producto.existencia = producto.existencia - articulo.cantidad;
+            try {
+              await producto.save();
+            } catch (error) {
+              console.log(error);
+            }
           }
         }
       }
       
+      
       const resultado = await Pedido.findOneAndUpdate({_id: id}, input, { new : true});
       return resultado;
     },
-    eliminarPedido: async (_, { id }) => {
+    eliminarPedido: async (_, { id }, ctx) => {
       //Revisar que existe
       let pedido = await Pedido.findById(id);
       if(!pedido){
